@@ -12,10 +12,11 @@ MODULE m_boundary_condition
 CONTAINS
 
 !======================================================================================
-  SUBROUTINE parse_boundary_condition(bc_name, bc_type)
+  SUBROUTINE parse_boundary_condition(bc_name, bc_type, is_known)
 !======================================================================================
     CHARACTER(len=*), INTENT(IN)  :: bc_name
     INTEGER,          INTENT(OUT) :: bc_type
+    LOGICAL, OPTIONAL, INTENT(OUT) :: is_known
     CHARACTER(len=32)             :: key
 
     key = adjustl(trim(bc_name))
@@ -24,8 +25,13 @@ CONTAINS
     SELECT CASE (trim(key))
     CASE ('periodic','pbc')
       bc_type = BC_PERIODIC
+      IF (present(is_known)) is_known = .true.
+    CASE ('dirichlet_zero','dirichlet','zero','open')
+      bc_type = BC_DIRICHLET_ZERO
+      IF (present(is_known)) is_known = .true.
     CASE DEFAULT
       bc_type = BC_DIRICHLET_ZERO
+      IF (present(is_known)) is_known = .false.
     END SELECT
   END SUBROUTINE parse_boundary_condition
 

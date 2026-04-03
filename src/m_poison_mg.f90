@@ -155,10 +155,11 @@ CONTAINS
   SUBROUTINE cg_poisson_solver(CELL,N1,N2,N3, nfd,rho,esp,vhar,bc_type)
 !======================================================================================
     USE precision,   ONLY: dp
+    USE m_boundary_condition, ONLY: BC_PERIODIC
 !    USE m_laplacian, ONLY: laplacian_fd
     USE m_grid_obj,   only: gradient_fd
     IMPLICIT NONE
-    logical   :: mg
+    logical   :: mg, is_periodic_bc
     INTEGER                  :: N1, N2, N3
     REAL(dp)  :: rho(N1*N2*N3), vhar(N1*N2*N3), esp(N1*N2*N3)
     real(dp)  :: CELL(3,3)
@@ -216,12 +217,13 @@ CONTAINS
 
     pi = 4.0_dp*atan(1.0_dp)
     pi8 = pi*8.0_dp
+    is_periodic_bc = (bc_type == BC_PERIODIC)
 
     ! Initial CG step
     iter=1
      
     ! Initial residual vector 'r_0'
-    call gradient_fd(.true.,CELL, N1, N2, N3, nfd, vhar,del1f, del2f, del3f) 
+    call gradient_fd(is_periodic_bc,CELL, N1, N2, N3, nfd, vhar,del1f, del2f, del3f) 
 
     do i = 1, ng
       del1f(i)=esp(i)*del1f(i)
@@ -229,9 +231,9 @@ CONTAINS
       del3f(i)=esp(i)*del3f(i)
     enddo
  
-    call gradient_fd(.true., CELL, N1, N2, N3, nfd, del1f, ddel1fx, ddel1fy, ddel1fz) 
-    call gradient_fd(.true., CELL, N1, N2, N3, nfd, del2f, ddel2fx, ddel2fy, ddel2fz) 
-    call gradient_fd(.true., CELL, N1, N2, N3, nfd, del3f, ddel3fx, ddel3fy, ddel3fz) 
+    call gradient_fd(is_periodic_bc, CELL, N1, N2, N3, nfd, del1f, ddel1fx, ddel1fy, ddel1fz) 
+    call gradient_fd(is_periodic_bc, CELL, N1, N2, N3, nfd, del2f, ddel2fx, ddel2fy, ddel2fz) 
+    call gradient_fd(is_periodic_bc, CELL, N1, N2, N3, nfd, del3f, ddel3fx, ddel3fy, ddel3fz) 
 
     do i = 1, ng
       r(i) = ddel1fx(i)+ddel2fy(i)+ddel3fz(i)
@@ -263,7 +265,7 @@ CONTAINS
       !  CALL filbdzero(N1,N2,N3,p)
        bkden=bknum
 
-       call gradient_fd(.true., CELL, N1, N2, N3, nfd, p,del1f, del2f, del3f) 
+       call gradient_fd(is_periodic_bc, CELL, N1, N2, N3, nfd, p,del1f, del2f, del3f) 
 
        do i = 1, ng
         del1f(i)=esp(i)*del1f(i)
@@ -271,9 +273,9 @@ CONTAINS
         del3f(i)=esp(i)*del3f(i)
        enddo
  
-       call gradient_fd(.true., CELL, N1, N2, N3, nfd, del1f, ddel1fx, ddel1fy, ddel1fz) 
-       call gradient_fd(.true., CELL, N1, N2, N3, nfd, del2f, ddel2fx, ddel2fy, ddel2fz) 
-       call gradient_fd(.true., CELL, N1, N2, N3, nfd, del3f, ddel3fx, ddel3fy, ddel3fz) 
+       call gradient_fd(is_periodic_bc, CELL, N1, N2, N3, nfd, del1f, ddel1fx, ddel1fy, ddel1fz) 
+       call gradient_fd(is_periodic_bc, CELL, N1, N2, N3, nfd, del2f, ddel2fx, ddel2fy, ddel2fz) 
+       call gradient_fd(is_periodic_bc, CELL, N1, N2, N3, nfd, del3f, ddel3fx, ddel3fy, ddel3fz) 
 
        do i = 1, ng
          z(i) = ddel1fx(i)+ddel2fy(i)+ddel3fz(i)
