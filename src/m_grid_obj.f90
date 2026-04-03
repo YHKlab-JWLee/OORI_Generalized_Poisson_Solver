@@ -46,6 +46,7 @@ CONTAINS
   SUBROUTINE grid_obj3d_gradient_fd(pbc,CELL,N1,N2,N3,nfd,f,del1f,del2f,del3f)
 !======================================================================================
     USE precision, ONLY: dp !,zero
+    USE m_boundary_condition, ONLY: build_periodic_halo
 !    USE m_nr, ONLY: weights
     IMPLICIT NONE
     integer :: N1, N2, N3
@@ -94,13 +95,7 @@ CONTAINS
 
     if (pbc) then
         allocate(f_temp(-nfd+1:N1+nfd,-nfd+1:N2+nfd,-nfd+1:N3+nfd))
-        f_temp(1:N1,1:N2,1:N3)=f(1:N1,1:N2,1:N3)
-        f_temp(-nfd+1:0,1:N2,1:N3)=f(N1-nfd+1:N1,1:N2,1:N3)
-        f_temp(N1+1:N1+nfd,1:N2,1:N3)=f(1:nfd,1:N2,1:N3)
-        f_temp(1:N1,-nfd+1:0,1:N3)=f(1:N1,N2-nfd+1:N2,1:N3)
-        f_temp(1:N1,N2+1:N2+nfd,1:N3)=f(1:N1,1:nfd,1:N3)
-        f_temp(1:N1,1:N2,-nfd+1:0)=f(1:N1,1:N2,N3-nfd+1:N3)
-        f_temp(1:N1,1:N2,N3+1:N3+nfd)=f(1:N1,1:N2,1:nfd)
+        call build_periodic_halo(f, nfd, f_temp)
     endif
 
     ALLOCATE(xsten(0:nsten),zcrd(1:N3), &

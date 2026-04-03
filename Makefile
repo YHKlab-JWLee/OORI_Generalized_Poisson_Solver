@@ -8,6 +8,7 @@ TARGET  := m_poisson_mg.x
 
 SRCS := \
 	$(SRC_DIR)/precision.f90 \
+	$(SRC_DIR)/m_boundary_condition.f90 \
 	$(SRC_DIR)/m_grid_obj.f90 \
 	$(SRC_DIR)/m_poison_mg.f90 \
 	$(SRC_DIR)/m_iorho_serial.f90 \
