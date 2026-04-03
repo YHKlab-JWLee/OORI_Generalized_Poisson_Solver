@@ -17,12 +17,15 @@ MODULE m_poison_mg
 CONTAINS
 
 !======================================================================================
-  SUBROUTINE generalized_poison_solver(CELL,N1,N2,N3,nfd,rho,esp,vhar,ehar,stress)
+  SUBROUTINE generalized_poison_solver(CELL,N1,N2,N3,nfd,rho,esp,vhar,ehar,stress,bc_type)
 !======================================================================================
     USE precision, ONLY: dp,grid_p
+    USE m_boundary_condition, ONLY: BC_DIRICHLET_ZERO
     IMPLICIT NONE
     LOGICAL                  :: hbc
     INTEGER                  :: N1, N2, N3, ierr, nfd
+    INTEGER, optional        :: bc_type
+    INTEGER                  :: bc_type_eff
     integer                  :: IX, JX, mpc
     REAL(grid_p) :: rho(N1*N2*N3), vhar(N1*N2*N3), esp(N1*N2*N3)
     REAL(dp)                 :: CELL(3,3)
@@ -56,7 +59,9 @@ CONTAINS
 !    CALL poison_mg(hbc,CELL,N1,N2,N3,rho,vhar)
 
 ! 2/ Polish up by higher order, more accurate solution using CG.
-    CALL cg_poisson_solver(CELL,N1,N2,N3,nfd,rho,esp,vhar)
+    bc_type_eff = BC_DIRICHLET_ZERO
+    IF (present(bc_type)) bc_type_eff = bc_type
+    CALL cg_poisson_solver(CELL,N1,N2,N3,nfd,rho,esp,vhar,bc_type_eff)
   
 !Grid Spacings
     dx = CELL(1,1)/real(N1-1, dp)
@@ -147,7 +152,7 @@ CONTAINS
 !  END SUBROUTINE poison_mg
 !
 !======================================================================================
-  SUBROUTINE cg_poisson_solver(CELL,N1,N2,N3, nfd,rho,esp,vhar)
+  SUBROUTINE cg_poisson_solver(CELL,N1,N2,N3, nfd,rho,esp,vhar,bc_type)
 !======================================================================================
     USE precision,   ONLY: dp
 !    USE m_laplacian, ONLY: laplacian_fd
@@ -158,6 +163,7 @@ CONTAINS
     REAL(dp)  :: rho(N1*N2*N3), vhar(N1*N2*N3), esp(N1*N2*N3)
     real(dp)  :: CELL(3,3)
     integer,  intent(in) :: nfd
+    integer,  intent(in) :: bc_type
 !    INTEGER,  INTENT(OUT) :: iter  ! Final iteration steps taken.
 !    REAL(dp), INTENT(OUT) :: err   ! Final error.
 !**************************************************************************************
@@ -233,11 +239,11 @@ CONTAINS
 
     r = -pi8*(rho) - r
 
-    CALL filbdzero(N1,N2,N3,r)
+    CALL apply_bc_vector(N1,N2,N3,bc_type,r)
 
     ! Norm of vector '-4 \pi * rho'
     call prcnd(N1,N2,N3,r,z)
-    CALL filbdzero(N1,N2,N3,z)
+    CALL apply_bc_vector(N1,N2,N3,bc_type,z)
     bnrm = pi8* MAXVAL(ABS(rho))
 
     ! Main loop 
@@ -282,7 +288,7 @@ CONTAINS
        ! Calculate new residual 'r_{k+1} = r_{k} - \alpha_{k} '
        r = r - ak*z
 
-       call prcnd(N1,N2,N3,r,z)
+      call prcnd(N1,N2,N3,r,z)
       !  CALL filbdzero(N1,N2,N3,z)
        ! Check stopping criterion
        err = MAXVAL(ABS(r))/bnrm
@@ -352,21 +358,25 @@ CONTAINS
   END SUBROUTINE prcnd
 
 !======================================================================================
-  SUBROUTINE filbdzero(N1,N2,N3,f)
+  SUBROUTINE apply_bc_vector(N1,N2,N3,bc_type,f)
 !======================================================================================
     USE precision, ONLY: dp
+    USE m_boundary_condition, ONLY: BC_PERIODIC, apply_boundary_condition_3d
     INTEGER, INTENT(IN)    :: N1,N2,N3
+    INTEGER, INTENT(IN)    :: bc_type
     REAL(dp),   INTENT(INOUT) :: f(1:N1,1:N2,1:N3)
-    real(dp)  :: zero
+    REAL(dp), allocatable :: ftmp(:,:,:)
 !**************************************************************************************
 !-- DESCRIPTIONS --
 ! Set boundary values of array 'f' to zero.
 !**************************************************************************************
-    zero = 0.0_dp
-    f(1,:,:)=zero; f(N1,:,:)=zero
-    f(:,1,:)=zero; f(:,N2,:)=zero
-    f(:,:,1)=zero; f(:,:,N3)=zero
-  END SUBROUTINE filbdzero
+    IF (bc_type == BC_PERIODIC) RETURN
+    allocate(ftmp(N1,N2,N3))
+    ftmp = f
+    call apply_boundary_condition_3d(bc_type, ftmp)
+    f = ftmp
+    deallocate(ftmp)
+  END SUBROUTINE apply_bc_vector
 
   END SUBROUTINE cg_poisson_solver
 
