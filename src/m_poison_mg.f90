@@ -157,6 +157,7 @@ CONTAINS
     USE precision,   ONLY: dp
 !    USE m_laplacian, ONLY: laplacian_fd
     USE m_grid_obj,   only: gradient_fd
+    USE m_poisson_bc_ops, ONLY: is_periodic_bc, precondition_fd_3d
     IMPLICIT NONE
     logical   :: mg
     INTEGER                  :: N1, N2, N3
@@ -221,7 +222,7 @@ CONTAINS
     iter=1
      
     ! Initial residual vector 'r_0'
-    call gradient_fd(.true.,CELL, N1, N2, N3, nfd, vhar,del1f, del2f, del3f) 
+    call gradient_fd(is_periodic_bc(bc_type),CELL, N1, N2, N3, nfd, vhar,del1f, del2f, del3f) 
 
     do i = 1, ng
       del1f(i)=esp(i)*del1f(i)
@@ -229,9 +230,9 @@ CONTAINS
       del3f(i)=esp(i)*del3f(i)
     enddo
  
-    call gradient_fd(.true., CELL, N1, N2, N3, nfd, del1f, ddel1fx, ddel1fy, ddel1fz) 
-    call gradient_fd(.true., CELL, N1, N2, N3, nfd, del2f, ddel2fx, ddel2fy, ddel2fz) 
-    call gradient_fd(.true., CELL, N1, N2, N3, nfd, del3f, ddel3fx, ddel3fy, ddel3fz) 
+    call gradient_fd(is_periodic_bc(bc_type), CELL, N1, N2, N3, nfd, del1f, ddel1fx, ddel1fy, ddel1fz) 
+    call gradient_fd(is_periodic_bc(bc_type), CELL, N1, N2, N3, nfd, del2f, ddel2fx, ddel2fy, ddel2fz) 
+    call gradient_fd(is_periodic_bc(bc_type), CELL, N1, N2, N3, nfd, del3f, ddel3fx, ddel3fy, ddel3fz) 
 
     do i = 1, ng
       r(i) = ddel1fx(i)+ddel2fy(i)+ddel3fz(i)
@@ -242,7 +243,7 @@ CONTAINS
     CALL apply_bc_vector(N1,N2,N3,bc_type,r)
 
     ! Norm of vector '-4 \pi * rho'
-    call prcnd(N1,N2,N3,r,z)
+    call prcnd(N1,N2,N3,bc_type,r,z)
     CALL apply_bc_vector(N1,N2,N3,bc_type,z)
     bnrm = pi8* MAXVAL(ABS(rho))
 
@@ -263,7 +264,7 @@ CONTAINS
       !  CALL filbdzero(N1,N2,N3,p)
        bkden=bknum
 
-       call gradient_fd(.true., CELL, N1, N2, N3, nfd, p,del1f, del2f, del3f) 
+       call gradient_fd(is_periodic_bc(bc_type), CELL, N1, N2, N3, nfd, p,del1f, del2f, del3f) 
 
        do i = 1, ng
         del1f(i)=esp(i)*del1f(i)
@@ -271,9 +272,9 @@ CONTAINS
         del3f(i)=esp(i)*del3f(i)
        enddo
  
-       call gradient_fd(.true., CELL, N1, N2, N3, nfd, del1f, ddel1fx, ddel1fy, ddel1fz) 
-       call gradient_fd(.true., CELL, N1, N2, N3, nfd, del2f, ddel2fx, ddel2fy, ddel2fz) 
-       call gradient_fd(.true., CELL, N1, N2, N3, nfd, del3f, ddel3fx, ddel3fy, ddel3fz) 
+       call gradient_fd(is_periodic_bc(bc_type), CELL, N1, N2, N3, nfd, del1f, ddel1fx, ddel1fy, ddel1fz) 
+       call gradient_fd(is_periodic_bc(bc_type), CELL, N1, N2, N3, nfd, del2f, ddel2fx, ddel2fy, ddel2fz) 
+       call gradient_fd(is_periodic_bc(bc_type), CELL, N1, N2, N3, nfd, del3f, ddel3fx, ddel3fy, ddel3fz) 
 
        do i = 1, ng
          z(i) = ddel1fx(i)+ddel2fy(i)+ddel3fz(i)
@@ -288,7 +289,7 @@ CONTAINS
        ! Calculate new residual 'r_{k+1} = r_{k} - \alpha_{k} '
        r = r - ak*z
 
-      call prcnd(N1,N2,N3,r,z)
+      call prcnd(N1,N2,N3,bc_type,r,z)
       !  CALL filbdzero(N1,N2,N3,z)
        ! Check stopping criterion
        err = MAXVAL(ABS(r))/bnrm
@@ -313,17 +314,15 @@ CONTAINS
   CONTAINS
 
 !======================================================================================
-  SUBROUTINE prcnd(N1,N2,N3,a,c)
+  SUBROUTINE prcnd(N1,N2,N3,bc_type,a,c)
 !======================================================================================
     USE precision, ONLY: dp
     IMPLICIT NONE
     INTEGER                  :: N1, N2, N3
+    INTEGER,  INTENT(IN)     :: bc_type
     REAL(dp),   INTENT(IN)  :: a(1:N1,1:N2,1:N3)  ! Input vector.
 !    REAL(dp),   INTENT(IN)  :: esp(1:N1,1:N2,1:N3)  ! Input vector.
     REAL(dp),   INTENT(OUT) :: c(1:N1,1:N2,1:N3)  ! Preconditioned vector.
-! JLee 200529
-    REAL(dp), allocatable, dimension(:,:,:) :: aux
-!    REAL(dp), allocatable, dimension(:,:,:) :: b, bux
 !**************************************************************************************
 !-- DESCRIPTIONS --
 ! Precondition vector 'a' to generate preconditoned vector 'b'
@@ -333,28 +332,7 @@ CONTAINS
 ! [2] Saas et al. BIT {\bf 36:3}, 563 (1996).
 !**************************************************************************************
 
-    INTEGER :: i,j,k,ipc
-    allocate(aux(0:N1+1, 0:N2+1, 0:N3+1))!, bux(0:N1+1,0:N2+1,0:N3+1))
-    aux(1:N1, 1:N2, 1:N3) = a(1:N1, 1:N2, 1:N3)
-    aux(0, 1:N2, 1:N3) = a(N1, 1:N2, 1:N3)
-    aux(N1+1, 1:N2, 1:N3) = a(1, 1:N2, 1:N3)
-    aux(1:N1, 0, 1:N3) = a(1:N1, N2, 1:N3)
-    aux(1:N1, N2+1, 1:N3) = a(1:N1, 1, 1:N3)
-    aux(1:N1, 1:N2, 0) = a(1:N1, 1:N2, N3)
-    aux(1:N1, 1:N2, N3+1) = a(1:N1, 1:N2, 1)
-
-    DO i=1,N1
-    DO j=1,N2
-    DO k=1,N3
-          c(i,j,k)=(aux(i-1,j,k) + aux(i+1,j,k) + &
-                    aux(i,j-1,k) + aux(i,j+1,k) + &
-                    aux(i,j,k-1) + aux(i,j,k+1))/12.0_dp + &
-                    aux(i,j,k)/2.0_dp
-    ENDDO
-    ENDDO
-    ENDDO
-
-    deallocate(aux)!,bux,b)
+    CALL precondition_fd_3d(N1,N2,N3,bc_type,a,c)
   END SUBROUTINE prcnd
 
 !======================================================================================
