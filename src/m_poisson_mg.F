@@ -1,7 +1,7 @@
 program m_poisson_mg_main
   use precision,      only : dp, grid_p
   use m_poison_mg,    only : generalized_poison_solver
-  use m_boundary_condition, only : BC_DIRICHLET_ZERO, parse_boundary_condition
+  use m_boundary_condition, only : BC_DIRICHLET_ZERO, BC_PERIODIC, parse_boundary_condition
   use m_iorho_serial, only : read_rho_serial, write_rho_serial
   implicit none
 
@@ -26,7 +26,7 @@ program m_poisson_mg_main
     read(arg,*) nfd
   end if
 
-  bc_type = BC_DIRICHLET_ZERO
+  bc_type = BC_PERIODIC
   if (narg >= 4) then
     call get_command_argument(4, bc_name)
     call parse_boundary_condition(trim(bc_name), bc_type)
