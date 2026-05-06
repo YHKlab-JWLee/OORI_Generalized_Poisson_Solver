@@ -107,9 +107,11 @@ CONTAINS
              STAT=ierr)
 
 !Grid Spacings
-    dx = CELL(1,1)/real(N1-1, dp)
-    dy = CELL(2,2)/real(N2-1, dp)
-    dz = CELL(3,3)/real(N3-1, dp)
+! SIESTA mesh files store N points over N mesh divisions:
+! x_i = i * L/N, i = 0, ..., N-1.  Do not reinterpret them as endpoint grids.
+    dx = CELL(1,1)/real(N1, dp)
+    dy = CELL(2,2)/real(N2, dp)
+    dz = CELL(3,3)/real(N3, dp)
 
     xcrd = arth_d(0.0_dp, dx, (N1))
     ycrd = arth_d(0.0_dp, dy, (N2))
@@ -387,9 +389,10 @@ CONTAINS
     lap_f = zero
 
     !Grid Spacings
-    dx = CELL(1,1)/real(N1-1, dp)
-    dy = CELL(2,2)/real(N2-1, dp)
-    dz = CELL(3,3)/real(N3-1, dp)
+    ! Keep the Laplacian helper on the same SIESTA-compatible mesh convention.
+    dx = CELL(1,1)/real(N1, dp)
+    dy = CELL(2,2)/real(N2, dp)
+    dz = CELL(3,3)/real(N3, dp)
 
 
     xcrd = arth_d(0.0_dp, dx, (N1))

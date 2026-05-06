@@ -27,8 +27,9 @@ CONTAINS
     INTEGER, optional        :: bc_type
     INTEGER                  :: bc_type_eff
     integer                  :: IX, JX, mpc
-    REAL(grid_p) :: rho(N1*N2*N3), vhar(N1*N2*N3), esp(N1*N2*N3)
-    REAL(dp)                 :: CELL(3,3)
+    REAL(grid_p), INTENT(IN)    :: rho(N1*N2*N3), esp(N1*N2*N3)
+    REAL(grid_p), INTENT(INOUT) :: vhar(N1*N2*N3)
+    REAL(dp),      INTENT(IN)   :: CELL(3,3)
     REAL(dp), optional       :: stress(3,3)
     REAL(dp)     :: ehar
     REAL(dp)                 :: dx, dy, dz, dvol
@@ -50,11 +51,13 @@ CONTAINS
 ! 990615 Type 'grid_obj' used.
 !**************************************************************************************
 !     Initialize stress contribution
-      do IX = 1,3
-        do JX = 1,3
-          STRESS(JX,IX) = 0.0_dp
+      if (present(stress)) then
+        do IX = 1,3
+          do JX = 1,3
+            STRESS(JX,IX) = 0.0_dp
+          enddo
         enddo
-      enddo
+      end if
 ! 1/ Initial `vhar2' by 3-point lower order solution of Poisson equation.
 !    CALL poison_mg(hbc,CELL,N1,N2,N3,rho,vhar)
 
@@ -64,9 +67,10 @@ CONTAINS
     CALL cg_poisson_solver(CELL,N1,N2,N3,nfd,rho,esp,vhar,bc_type_eff)
   
 !Grid Spacings
-    dx = CELL(1,1)/real(N1-1, dp)
-    dy = CELL(2,2)/real(N2-1, dp)
-    dz = CELL(3,3)/real(N3-1, dp)
+! Match SIESTA mesh files: N stored points over N mesh divisions.
+    dx = CELL(1,1)/real(N1, dp)
+    dy = CELL(2,2)/real(N2, dp)
+    dz = CELL(3,3)/real(N3, dp)
 
 !Grid cell volume.
     dvol = dx*dy*dz   
@@ -157,11 +161,14 @@ CONTAINS
     USE precision,   ONLY: dp
 !    USE m_laplacian, ONLY: laplacian_fd
     USE m_grid_obj,   only: gradient_fd
+    USE m_boundary_condition, ONLY : BC_PERIODIC
     IMPLICIT NONE
     logical   :: mg
+    logical   :: pbc
     INTEGER                  :: N1, N2, N3
-    REAL(dp)  :: rho(N1*N2*N3), vhar(N1*N2*N3), esp(N1*N2*N3)
-    real(dp)  :: CELL(3,3)
+    REAL(dp), INTENT(IN)    :: rho(N1*N2*N3), esp(N1*N2*N3)
+    REAL(dp), INTENT(INOUT) :: vhar(N1*N2*N3)
+    real(dp),  INTENT(IN)   :: CELL(3,3)
     integer,  intent(in) :: nfd
     integer,  intent(in) :: bc_type
 !    INTEGER,  INTENT(OUT) :: iter  ! Final iteration steps taken.
@@ -196,7 +203,7 @@ CONTAINS
     INTEGER  :: i,ng,ierr, iter
     REAL(dp) :: ak,akden,bk,bkden,bknum,bnrm
     real(dp)  :: pi, pi8, err
-    real(dp)  :: dHtol=1.e-7_dp
+    real(dp)  :: dHtol=1.e-5_dp
     REAL(dp), ALLOCATABLE, DIMENSION(:) :: p,r,z
     REAL(dp), allocatable, dimension(:) :: del1f, del2f, del3f
     REAL(dp), allocatable, dimension(:) :: ddel1fx,ddel1fy,ddel1fz
@@ -216,12 +223,13 @@ CONTAINS
 
     pi = 4.0_dp*atan(1.0_dp)
     pi8 = pi*8.0_dp
+    pbc = (bc_type == BC_PERIODIC)
 
     ! Initial CG step
     iter=1
      
     ! Initial residual vector 'r_0'
-    call gradient_fd(.true.,CELL, N1, N2, N3, nfd, vhar,del1f, del2f, del3f) 
+    call gradient_fd(pbc,CELL, N1, N2, N3, nfd, vhar,del1f, del2f, del3f) 
 
     do i = 1, ng
       del1f(i)=esp(i)*del1f(i)
@@ -229,15 +237,16 @@ CONTAINS
       del3f(i)=esp(i)*del3f(i)
     enddo
  
-    call gradient_fd(.true., CELL, N1, N2, N3, nfd, del1f, ddel1fx, ddel1fy, ddel1fz) 
-    call gradient_fd(.true., CELL, N1, N2, N3, nfd, del2f, ddel2fx, ddel2fy, ddel2fz) 
-    call gradient_fd(.true., CELL, N1, N2, N3, nfd, del3f, ddel3fx, ddel3fy, ddel3fz) 
+    call gradient_fd(pbc, CELL, N1, N2, N3, nfd, del1f, ddel1fx, ddel1fy, ddel1fz) 
+    call gradient_fd(pbc, CELL, N1, N2, N3, nfd, del2f, ddel2fx, ddel2fy, ddel2fz) 
+    call gradient_fd(pbc, CELL, N1, N2, N3, nfd, del3f, ddel3fx, ddel3fy, ddel3fz) 
 
     do i = 1, ng
       r(i) = ddel1fx(i)+ddel2fy(i)+ddel3fz(i)
     enddo
 
     r = -pi8*(rho) - r
+    if (pbc) r = r - SUM(r)/REAL(SIZE(r),dp)
 
     CALL apply_bc_vector(N1,N2,N3,bc_type,r)
 
@@ -263,7 +272,7 @@ CONTAINS
       !  CALL filbdzero(N1,N2,N3,p)
        bkden=bknum
 
-       call gradient_fd(.true., CELL, N1, N2, N3, nfd, p,del1f, del2f, del3f) 
+       call gradient_fd(pbc, CELL, N1, N2, N3, nfd, p,del1f, del2f, del3f) 
 
        do i = 1, ng
         del1f(i)=esp(i)*del1f(i)
@@ -271,9 +280,9 @@ CONTAINS
         del3f(i)=esp(i)*del3f(i)
        enddo
  
-       call gradient_fd(.true., CELL, N1, N2, N3, nfd, del1f, ddel1fx, ddel1fy, ddel1fz) 
-       call gradient_fd(.true., CELL, N1, N2, N3, nfd, del2f, ddel2fx, ddel2fy, ddel2fz) 
-       call gradient_fd(.true., CELL, N1, N2, N3, nfd, del3f, ddel3fx, ddel3fy, ddel3fz) 
+       call gradient_fd(pbc, CELL, N1, N2, N3, nfd, del1f, ddel1fx, ddel1fy, ddel1fz) 
+       call gradient_fd(pbc, CELL, N1, N2, N3, nfd, del2f, ddel2fx, ddel2fy, ddel2fz) 
+       call gradient_fd(pbc, CELL, N1, N2, N3, nfd, del3f, ddel3fx, ddel3fy, ddel3fz) 
 
        do i = 1, ng
          z(i) = ddel1fx(i)+ddel2fy(i)+ddel3fz(i)
@@ -287,11 +296,15 @@ CONTAINS
 
        ! Calculate new residual 'r_{k+1} = r_{k} - \alpha_{k} '
        r = r - ak*z
+       if (pbc) r = r - SUM(r)/REAL(SIZE(r),dp)
 
       call prcnd(N1,N2,N3,r,z)
       !  CALL filbdzero(N1,N2,N3,z)
        ! Check stopping criterion
        err = MAXVAL(ABS(r))/bnrm
+       if (iter == 1 .or. mod(iter, 100) == 0) then
+          WRITE (6,'(a,i0,a,1x,es12.4)') 'cg_poisson_solver: iter=',iter,' err=',err
+       end if
 
        IF(err <= dHtol) EXIT
 
@@ -305,6 +318,8 @@ CONTAINS
        ENDIF
     END DO
     
+    if (pbc) vhar = vhar - SUM(vhar)/REAL(SIZE(vhar),dp)
+
     WRITE (6,*) 'cg_poisson_solver: iter=',iter
 
     DEALLOCATE(p,r,z,del1f, del2f, del3f, ddel1fx, ddel1fy, ddel1fz, &
@@ -335,13 +350,16 @@ CONTAINS
 
     INTEGER :: i,j,k,ipc
     allocate(aux(0:N1+1, 0:N2+1, 0:N3+1))!, bux(0:N1+1,0:N2+1,0:N3+1))
+    aux = 0.0_dp
     aux(1:N1, 1:N2, 1:N3) = a(1:N1, 1:N2, 1:N3)
-    aux(0, 1:N2, 1:N3) = a(N1, 1:N2, 1:N3)
-    aux(N1+1, 1:N2, 1:N3) = a(1, 1:N2, 1:N3)
-    aux(1:N1, 0, 1:N3) = a(1:N1, N2, 1:N3)
-    aux(1:N1, N2+1, 1:N3) = a(1:N1, 1, 1:N3)
-    aux(1:N1, 1:N2, 0) = a(1:N1, 1:N2, N3)
-    aux(1:N1, 1:N2, N3+1) = a(1:N1, 1:N2, 1)
+    if (pbc) then
+      aux(0, 1:N2, 1:N3) = a(N1, 1:N2, 1:N3)
+      aux(N1+1, 1:N2, 1:N3) = a(1, 1:N2, 1:N3)
+      aux(1:N1, 0, 1:N3) = a(1:N1, N2, 1:N3)
+      aux(1:N1, N2+1, 1:N3) = a(1:N1, 1, 1:N3)
+      aux(1:N1, 1:N2, 0) = a(1:N1, 1:N2, N3)
+      aux(1:N1, 1:N2, N3+1) = a(1:N1, 1:N2, 1)
+    end if
 
     DO i=1,N1
     DO j=1,N2
